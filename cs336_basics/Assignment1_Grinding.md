@@ -108,8 +108,51 @@ chr调用的主要是用的是repr，用于给调试人员看，而print用的�
 
 
 - 由字符组成的就是字符串
+- UTF-8是存储的方式，1字节是8bit，所以需要将某个字符（码点，0-154997）转化为一系列byte（2-255）
+Problem (unicode2): Unicode Encodings (3 points)
 
+(a)问为什么训练tokenizer 都是在UTF-8而不是UTF-16/32？
+因为utf8 使用广泛，utf16，32 都有很多冗余
 
+(b)应该是函数将字节数组中的每一个数字都认为是同一个字符进行解码了，不应该单字节的进行编码，遇到中文字符就抓瞎了
+
+(c) 找一个两字节的序列，并不能被转化为任何Unicode 的字符
+- 问题转化：希望找到一个两字节的bytes（具体的存储字节），这个bytes 不能被转化为任何str（人看的）
+
+- \x 代表转义十六进制"Hexadecimal"
+- `b'\x61'` 等同于 `b'a'`。
+- `b'\x0a'` 等同于 换行。
+> type("hello") 人看的
+
+<class 'str'>
+
+> type(b"\xe4") （具体的存储字节）
+
+<class 'bytes'>
+
+解答：
+找一个合法的 2 字节开头（比如 `0xC2`，二进制 `11000010`），但后面不给它合法的续字节（比如给个空格 `0x20`，二进制 `00100000`）。
+
+```python
+# b'\xC2' 说：后面应该来个以10开头的字节！
+# b'\x20' 说：我是以00开头的ASCII，嘿嘿。
+(b"\xC2\x20").decode("utf-8")
+```
+
+请回忆（或查阅）一下 UTF-8 的二进制规则表：
+| 字节数 | 格式 (二进制) |
+| :--- | :--- |
+| 1 字节 | `0xxxxxxx` |
+| 2 字节 | **`110xxxxx`** `10xxxxxx` |
+| 3 字节 | `1110xxxx` `10xxxxxx` `10xxxxxx` |
+
+| 错误类型 | 典型案例 (Python Bytes) | 报错信息 (Error Message) | 事故原因分析 (Architect's Analysis) |
+| :--- | :--- | :--- | :--- |
+| **1. 冗余编码**<br>(Overlong Encoding) | `b'\xC0\x00'`<br>或 `b'\xC1\x80'` | `invalid start byte` | **“伪造发票”**<br>`0xC0` 和 `0xC1` 被永久封杀。因为它们作为双字节开头时，只能组合出本该由单字节（ASCII）表示的字符。为了安全（防止绕过过滤），标准规定必须使用最短编码。 |
+| **2. 错误的延续**<br>(Invalid Continuation) | `b'\xC2\x20'`<br>(开头好，结尾坏) | `invalid continuation byte` | **“搭档不合”**<br>第一个字节 `0xC2` 是合法的双字节头（期待后面来个 `10xxxxxx`）。但第二个字节 `0x20` (空格) 是个 ASCII (`00xxxxxx`)。解码器读到一半发现格式断了。 |
+| **3. 孤立的延续符**<br>(Orphan Continuation) | `b'\x80\x00'` | `invalid start byte` | **“没头苍蝇”**<br>`0x80` (二进制 `10000000`) 被定义为“跟班”（延续字节）。它绝不能出现在开头。没有大哥带路，小弟不能单独行动。 |
+| **4. 绝对非法字符**<br>(Illegal Bytes) | `b'\xFF\x00'` | `invalid start byte` | **“违禁品”**<br>`0xFF` 和 `0xFE` 在 UTF-8 标准中没有任何定义，出现在任何位置都是非法的。 |
+| **5. 数据截断**<br>(Truncated Data) | `b'\xC2'`<br>(只有一半) | `unexpected end of data` | **“烂尾楼”**<br>`0xC2` 承诺了“后面还有一个字节”，但数据流突然结束了。这通常不是字节本身错了，而是数据没传完。 |
 
 ## Suspendix
 
