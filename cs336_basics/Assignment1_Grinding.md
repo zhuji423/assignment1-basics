@@ -167,10 +167,18 @@ Problem (unicode2): Unicode Encodings (3 points)
 
 - word-level model、 character-level model
 
+- 字词分词器是 单词级别分词器(word-level)和字节级别分词器(byte-level)的综合
+
+1. Vocabulary init: 初始化的字典大小就是256
+2. Pre-token:将word 通过正则切出来
+3. Compute BPE merges: 如果频率一样，选择字典序更大的
+    - 所谓的“Break ties by preferring the lexicographically greater pair”，意思就是：当频率一样高时，选那个在字典里排在最后面的 Pair。
+4. Special token：开始和结束的token
+
 
 | 模型类型 (Model Type) | 颗粒度 (Granularity) | 示例 (Example: "Hi 你好") | 词表大小 (Vocabulary Size) | 序列长度 (Sequence Length) | 建筑师评价 (Architect's Note) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Word-level**<br>(单词级) | **整词**<br>(Whole Words) | `["Hi", "你好"]`<br>(2 Tokens) | **巨大** (>100k)<br>容易有 OOV (未登录词) | **极短**<br>效率最高，但遇到生僻词就瘫痪 (UNK)。 | **“整块预制板”**<br>建得快，但极其僵化。遇到字典里没有的词，只能留个大窟窿。 |
+| **Word-level**<br>(单词级) | **整词**<br>(Whole Words) | `["Hi", "你好"]`<br>(2 Tokens) | **巨大** (>100k)<br>容易有 OOV (未登录词) ,新单词容易找不到，| **极短**<br>效率最高，但遇到生僻词就瘫痪 (UNK)。 | **“整块预制板”**<br>建得快，但极其僵化。遇到字典里没有的词，只能留个大窟窿。 |
 | **Character-level**<br>(字符级) | **字符**<br>(Unicode Char) | `['H', 'i', ' ', '你', '好']`<br>(5 Tokens) | **两极分化**<br>纯英文: ~100 (极小)<br>含中文: >10万 (巨大且稀疏!) | **很长**<br>英文比 Word 级长 5 倍。<br>中文是 1 字 1 Token。 | **“原子级堆砌”**<br>纯英文还凑合，但一旦引入中文，词表又大、序列又长，两头的缺点都占了。 |
 | **Byte-level (Pure)**<br>(纯字节级) | **字节**<br>(UTF-8 Bytes) | `[72, 105, 32, 228, 189, 160, ...]`<br>(9 Tokens)<br>*注: "你"=3 tokens* | **极小固定 (256)**<br>(0x00 - 0xFF)<br>永无 OOV。 | **最长**<br>中文变 3 倍长，Emoji 变 4 倍长。<br>计算量最大。 | **“二进制碎渣”**<br>这是最底层的原材料。虽然彻底消灭了 OOV，但把汉字拆得太碎，模型很难理解语义，训练极慢。 |
 | **Subword (BPE)**<br>(现代标准 Byte-level BPE) | **混合**<br>(Adaptive) | `["Hi", " ", "你", "好"]`<br>(4 Tokens) | **适中 (~50k-100k)**<br>人为设定的“黄金平衡点”。 | **适中**<br>常用字合并(1 token)，生僻字拆解(bytes)。 | **“模块化施工”**<br>先把它粉碎成 Bytes (防止 OOV)，再把最常用的碎片粘回去 (保证效率)。**这是目前 LLM 的最优解。** |
@@ -183,7 +191,6 @@ Problem (unicode2): Unicode Encodings (3 points)
 - vocabulary init:初始的词表大小是256大小
 - pre-tokenization:在做BPE之前，我们通常需要先将字符串切碎，如果不切碎分词器会将"dog!","dog,"都作为不同的token，这是不正确的
 - Pre-tokenization = 先粗切 + 统计频次，BPE = 在粗切的块内部做细粒度合并。
-
 
 
 
