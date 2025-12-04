@@ -95,6 +95,7 @@ chr调用的主要是用的是repr，用于给调试人员看，而print用的�
 > code point 范围是0-1百万，如何将这里面的整数变为字节
 - <span style="color: rgba(255, 179, 0, 1)">将Unicode 字符（28万-13万=15万）转化为一系列的字节</span>
 这就是 UTF (Unicode Transformation Format) 要解决的问题。
+- 将文本转化为字节的问题
 
 | 特性 | UTF-8 | UTF-16 | UTF-32 |
 | --- | --- | --- | --- |
@@ -153,6 +154,39 @@ Problem (unicode2): Unicode Encodings (3 points)
 | **3. 孤立的延续符**<br>(Orphan Continuation) | `b'\x80\x00'` | `invalid start byte` | **“没头苍蝇”**<br>`0x80` (二进制 `10000000`) 被定义为“跟班”（延续字节）。它绝不能出现在开头。没有大哥带路，小弟不能单独行动。 |
 | **4. 绝对非法字符**<br>(Illegal Bytes) | `b'\xFF\x00'` | `invalid start byte` | **“违禁品”**<br>`0xFF` 和 `0xFE` 在 UTF-8 标准中没有任何定义，出现在任何位置都是非法的。 |
 | **5. 数据截断**<br>(Truncated Data) | `b'\xC2'`<br>(只有一半) | `unexpected end of data` | **“烂尾楼”**<br>`0xC2` 承诺了“后面还有一个字节”，但数据流突然结束了。这通常不是字节本身错了，而是数据没传完。 |
+
+
+
+# 2.3 Subword Tokenization
+
+
+>While byte-level tokenization can alleviate the out-of-vocabulary issues faced by word-level tokenizers, tokenizing text into bytes results in extremely long input sequences
+
+- 单词级别的分词器如果遇到没见过的单词就会出现Out-of-Vocabulary Issues，例如字典中有apple，但是appl，苹果就无法识别
+- 字节级别的分词器任何单词都可以识别，但是字典就爆炸了
+
+- word-level model、 character-level model
+
+
+| 模型类型 (Model Type) | 颗粒度 (Granularity) | 示例 (Example: "Hi 你好") | 词表大小 (Vocabulary Size) | 序列长度 (Sequence Length) | 建筑师评价 (Architect's Note) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Word-level**<br>(单词级) | **整词**<br>(Whole Words) | `["Hi", "你好"]`<br>(2 Tokens) | **巨大** (>100k)<br>容易有 OOV (未登录词) | **极短**<br>效率最高，但遇到生僻词就瘫痪 (UNK)。 | **“整块预制板”**<br>建得快，但极其僵化。遇到字典里没有的词，只能留个大窟窿。 |
+| **Character-level**<br>(字符级) | **字符**<br>(Unicode Char) | `['H', 'i', ' ', '你', '好']`<br>(5 Tokens) | **两极分化**<br>纯英文: ~100 (极小)<br>含中文: >10万 (巨大且稀疏!) | **很长**<br>英文比 Word 级长 5 倍。<br>中文是 1 字 1 Token。 | **“原子级堆砌”**<br>纯英文还凑合，但一旦引入中文，词表又大、序列又长，两头的缺点都占了。 |
+| **Byte-level (Pure)**<br>(纯字节级) | **字节**<br>(UTF-8 Bytes) | `[72, 105, 32, 228, 189, 160, ...]`<br>(9 Tokens)<br>*注: "你"=3 tokens* | **极小固定 (256)**<br>(0x00 - 0xFF)<br>永无 OOV。 | **最长**<br>中文变 3 倍长，Emoji 变 4 倍长。<br>计算量最大。 | **“二进制碎渣”**<br>这是最底层的原材料。虽然彻底消灭了 OOV，但把汉字拆得太碎，模型很难理解语义，训练极慢。 |
+| **Subword (BPE)**<br>(现代标准 Byte-level BPE) | **混合**<br>(Adaptive) | `["Hi", " ", "你", "好"]`<br>(4 Tokens) | **适中 (~50k-100k)**<br>人为设定的“黄金平衡点”。 | **适中**<br>常用字合并(1 token)，生僻字拆解(bytes)。 | **“模块化施工”**<br>先把它粉碎成 Bytes (防止 OOV)，再把最常用的碎片粘回去 (保证效率)。**这是目前 LLM 的最优解。** |
+
+- BPE：通过将最常见的部分都给他压缩为同一个token
+## 在这节课中，我们需要实现一个byte-level BPE tokenizer
+
+
+# 2.4 BPE 分词器训练 
+- vocabulary init:初始的词表大小是256大小
+- pre-tokenization:在做BPE之前，我们通常需要先将字符串切碎，如果不切碎分词器会将"dog!","dog,"都作为不同的token，这是不正确的
+- Pre-tokenization = 先粗切 + 统计频次，BPE = 在粗切的块内部做细粒度合并。
+
+
+
+
 
 ## Suspendix
 
